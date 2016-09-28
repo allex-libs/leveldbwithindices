@@ -37,6 +37,7 @@ function createDBHandlerWithIndices(execlib, leveldblib, bufferlib, leveldbext) 
       sd.reject.bind(sd)
     )
     this.indexmap = new lib.Map();
+    this.lock = new qlib.JobCollection();
     this.dbwithindices = [this];
     DBHandler.call(this,prophash);
   }
@@ -48,6 +49,10 @@ function createDBHandlerWithIndices(execlib, leveldblib, bufferlib, leveldbext) 
       lib.arryDestroyAll(this.dbwithindices);
     }
     this.dbwithindices = null;
+    if (this.lock) {
+      this.lock.destroy();
+    }
+    this.lock = null;
     if (this.indexmap) {
       this.indexmap.destroy();
     }
@@ -107,7 +112,9 @@ function createDBHandlerWithIndices(execlib, leveldblib, bufferlib, leveldbext) 
     } catch (e) {
       return q.reject(e);
     }
-    return leveldbext.storeWithIndices(this.dbwithindices, [keysegments, value], {keybuilder: leveldbext.verbatimArray});
+    return this.lock.run('lock', new qlib.PromiseExecutorJob([
+      leveldbext.storeWithIndices.bind(null, this.dbwithindices, [keysegments, value], {keybuilder: leveldbext.verbatimArray})
+    ]));
   };
   DBHandlerWithIndices.prototype.originalUpsert = function (key, processorfunc, defaultrecord) {
     return DBHandler.prototype.upsert.call(this, key, processorfunc, defaultrecord);
@@ -120,7 +127,48 @@ function createDBHandlerWithIndices(execlib, leveldblib, bufferlib, leveldbext) 
       return q.reject(e);
     }
     //this is an overkill, indices need not be notified at all...
-    return leveldbext.storeWithIndices(this.dbwithindices, [keysegments, processorfunc, defaultrecord], {keybuilder: leveldbext.verbatimArray, putmethod:'originalUpsert'});
+    return this.lock.run('lock', new qlib.PromiseExecutorJob([
+      leveldbext.storeWithIndices.bind(null, this.dbwithindices, [keysegments, processorfunc, defaultrecord], {keybuilder: leveldbext.verbatimArray, putmethod:'originalUpsert'})
+    ]));
+  };
+  DBHandlerWithIndices.prototype.traverseByIndex = function (keyname, keyvalue, cb, options) {
+    var keyindex = this.indexmap.get(keyname), index, storage;
+    if (!lib.isNumber(keyindex)) {
+      return q.reject(new lib.Error('KEY_NAME_NOT_IN_INDICES', keyname));
+    }
+    index = this.dbwithindices[keyindex+1];
+    if (!index) {
+      return q.reject(new lib.Error('INTERNAL_ERROR_IN_GETTING_THE_INDEX', keyindex+1));
+    }
+    return index.safeGet(keyvalue, [[]]).then(pickrecords.bind(null, this.dbwithindices[0]));
+  };
+
+  function pickrecords(storage, indexentries) {
+    var ret, d = q.defer(), promises = indexentries[0].map(function (entry) {
+      return function () {
+        var _p = storage.get(entry);
+        _p.then(function(value) {
+          d.notify({
+            key: entry,
+            value: value
+          });
+          entry = null;
+        });
+        return _p;
+      }
+    });
+    (new qlib.PromiseExecutorJob(promises)).go().then(
+      function (result) {
+        d.resolve(result);
+        storage = null;
+        d = null;
+      },
+      function (reason) {
+        d.reject(reason);
+        d = null;
+      }
+    );
+    return d.promise;
   };
 
   return DBHandlerWithIndices;

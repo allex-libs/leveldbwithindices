@@ -39,10 +39,39 @@ function createStoreFuncs (execlib, leveldblib, bufferlib, leveldbext) {
     return valarry;
   }
 
+  function removerFromArray (key, valarry) {
+    console.log('input arry for index remove', valarry, 'key is', key);
+    var ind = -1, i, vals = valarry[0];
+    if (!vals.length) {
+      return;
+    }
+    for (i=0; i<vals.length; i++) {
+      if (lib.isEqual(vals[i], key)) {
+        vals.splice(i, 1);
+      }
+    }
+    if (vals.length) {
+      console.log('will update indices with', valarry);
+      return valarry;
+    }
+    console.log('will remove index');
+  }
+
   function saveIndices(dbwithindices, keysegmentarry, key, result) {
     var i, promises = [];
+    if (!lib.isArray(result)) {
+      return q(result);
+    }
+    if (lib.isArray(result[0]) && lib.isEqual(key, result[0])) {
+      for (i=1; i<dbwithindices.length; i++) {
+        promises.push(dbwithindices[i].upsert(keysegmentarry[i-1], adderToArray.bind(null, key), [[]]));
+      }
+      return q.all(promises).then(
+        qlib.returner(result)
+      );
+    }
     for (i=1; i<dbwithindices.length; i++) {
-      promises.push(dbwithindices[i].upsert(keysegmentarry[i-1], adderToArray.bind(null, key), [[]]));
+        promises.push(dbwithindices[i].upsert(keysegmentarry[i-1], removerFromArray.bind(null, key), [[]]));
     }
     return q.all(promises).then(
       qlib.returner(result)
