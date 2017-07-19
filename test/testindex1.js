@@ -121,5 +121,5 @@ function goForDBHandler (execlib, leveldblib, bufferlib, leveldbext) {
 
 
 module.exports = function test1(execlib) {
-  return execlib.loadDependencies('client', ['allex:leveldb:lib', 'allex:buffer:lib', 'allex:leveldbext:lib'], goForDBHandler.bind(null, execlib));
+  return execlib.loadDependencies('client', ['allex_leveldblib', 'allex_bufferlib', 'allex_leveldbextlib'], goForDBHandler.bind(null, execlib));
 };
