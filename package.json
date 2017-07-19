@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@gitlab.hers.rs:allex_libs/leveldbwithindices.git"
+    "url": "git@github.com:allex-libs/leveldbwithindices.git"
   },
   "keywords": [
     "ecosystem:AllexJS",
